@@ -1,0 +1,1243 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Fude — Board tratti kanji</title>
+<style>
+  :root {
+    --font-serif: "Hiragino Mincho ProN", "Yu Mincho", "Noto Serif CJK JP", "Noto Serif JP", Georgia, serif;
+    --font-sans: system-ui, -apple-system, "Hiragino Kaku Gothic ProN", "Noto Sans CJK JP", "Noto Sans JP", sans-serif;
+    --paper: #F8F4E9;
+    --page: #ECE7DB;
+    --ink: #211E1A;
+    --ink-soft: #5C564C;
+    --shu: #BF3B2B;         /* vermiglio hanko */
+    --shu-dark: #9E2F22;
+    --guide: #C9BFA8;
+    --card: #FFFDF7;
+    --line: #DDD5C3;
+    --btn-hover: #F3EEE0;
+    --radius: 10px;
+  }
+  body.dark {
+    --paper: #26231F;
+    --page: #191714;
+    --ink: #EDE8DC;
+    --ink-soft: #A79E8F;
+    --shu: #D45543;
+    --shu-dark: #B8402F;
+    --guide: #4E463A;
+    --card: #23201C;
+    --line: #3A362F;
+    --btn-hover: #2C2823;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    font-family: var(--font-sans);
+    background: var(--page);
+    color: var(--ink);
+    -webkit-tap-highlight-color: transparent;
+    transition: background .2s, color .2s;
+    height: 100dvh;
+    overflow: hidden;
+    display: flex; flex-direction: column;
+  }
+  header {
+    display: flex; align-items: baseline; gap: 10px;
+    padding: 10px 16px 4px;
+    flex: 0 0 auto;
+  }
+  header h1 {
+    font-family: var(--font-serif);
+    font-weight: 700; font-size: 20px; letter-spacing: 0.02em;
+  }
+  header h1 .kanji { color: var(--shu); margin-right: 5px; }
+  header .sub { color: var(--ink-soft); font-size: 12px; }
+  .theme-btn {
+    margin-left: auto; align-self: center;
+    padding: 5px 10px; font-size: 15px; line-height: 1;
+  }
+
+  /* ---- Zona controlli unica in alto ---- */
+  .topbar {
+    flex: 0 0 auto;
+    display: flex; flex-wrap: wrap; gap: 6px;
+    align-items: center; justify-content: center;
+    padding: 6px 10px 8px;
+  }
+  .topbar button { padding: 9px 12px; font-size: 13px; }
+  .tb-sep {
+    width: 1px; height: 26px;
+    background: var(--line);
+    margin: 0 4px;
+  }
+
+  /* ---- Board: riempie lo spazio restante, niente scroll ---- */
+  .board-area {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex; align-items: center; justify-content: center;
+    padding: 6px 10px;
+  }
+  .canvas-frame {
+    position: relative;
+    border-radius: var(--radius);
+    box-shadow: 0 2px 6px rgba(33,30,26,.10), 0 10px 30px rgba(33,30,26,.08);
+    overflow: hidden;
+  }
+  canvas {
+    position: absolute; inset: 0;
+    width: 100%; height: 100%;
+    touch-action: none;
+    cursor: crosshair;
+    display: block;
+  }
+
+  .export-wrap { position: relative; display: flex; }
+  .export-menu {
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    z-index: 60;
+    display: flex; flex-direction: column; gap: 4px;
+    padding: 6px;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    box-shadow: 0 6px 20px rgba(33,30,26,.18);
+    min-width: 200px;
+  }
+  .export-menu[hidden] { display: none; }
+  .export-menu button { text-align: left; padding: 11px 12px; }
+  .menu-save-area {
+    display: flex; flex-direction: column; gap: 4px;
+    margin-top: 4px; padding-top: 6px;
+    border-top: 1px solid var(--line);
+  }
+  .menu-save-area[hidden] { display: none; }
+  .menu-save-area .save-label {
+    font-size: 11px; color: var(--ink-soft);
+    padding: 2px 4px 0;
+  }
+  .menu-save-area button { width: 100%; }
+  .seg {
+    display: inline-flex;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    overflow: hidden;
+    background: var(--card);
+  }
+  .seg button {
+    border: none; border-radius: 0;
+    padding: 9px 12px; font-size: 13px;
+  }
+  .seg button + button { border-left: 1px solid var(--line); }
+  .seg button.active { background: var(--shu); color: #fff; }
+  .seg button.active:hover { background: var(--shu-dark); }
+
+  /* ---- Pannello laterale a scomparsa (drawer) ---- */
+  aside {
+    position: fixed;
+    top: 0; right: 0; bottom: 0;
+    z-index: 70;
+    width: min(370px, 92vw);
+    display: flex; flex-direction: column; gap: 14px;
+    padding: 14px;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    background: var(--page);
+    border-left: 1px solid var(--line);
+    box-shadow: -8px 0 28px rgba(33,30,26,.16);
+    transition: transform .25s ease;
+  }
+  body.panel-collapsed aside {
+    transform: translateX(105%);
+    pointer-events: none;
+  }
+  .panel-head {
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .panel-head h2 {
+    font-family: var(--font-serif);
+    font-size: 16px; font-weight: 700;
+  }
+  .about {
+    margin-top: auto;
+    padding-top: 12px;
+    border-top: 1px solid var(--line);
+    font-size: 12px;
+    color: var(--ink-soft);
+    display: flex; flex-direction: column; gap: 5px;
+  }
+  .about strong { color: var(--ink); font-family: var(--font-serif); }
+  .about a { color: var(--shu); }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 14px;
+  }
+  .card h2 {
+    font-family: var(--font-serif);
+    font-size: 15px; font-weight: 700;
+    margin-bottom: 10px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .card h2::before {
+    content: ""; width: 8px; height: 8px;
+    background: var(--shu); border-radius: 2px;
+    display: inline-block;
+  }
+
+  button {
+    font-family: inherit;
+    font-size: 14px; font-weight: 500;
+    padding: 9px 14px;
+    border-radius: 8px;
+    border: 1px solid var(--line);
+    background: var(--card);
+    color: var(--ink);
+    cursor: pointer;
+    transition: background .12s, transform .05s;
+  }
+  button:hover { background: var(--btn-hover); }
+  button:active { transform: translateY(1px); }
+  button:focus-visible { outline: 2px solid var(--shu); outline-offset: 2px; }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  button.primary {
+    background: var(--shu); color: #fff; border-color: var(--shu-dark);
+  }
+  button.primary:hover { background: var(--shu-dark); }
+  .btn-row { display: flex; flex-wrap: wrap; gap: 8px; }
+
+  label.field { display: block; font-size: 13px; color: var(--ink-soft); margin-bottom: 4px; }
+  input[type="text"] {
+    font-family: inherit; font-size: 15px;
+    width: 100%; padding: 9px 12px;
+    border: 1px solid var(--line); border-radius: 8px;
+    background: var(--paper); color: var(--ink);
+  }
+  input[type="text"]:focus-visible { outline: 2px solid var(--shu); outline-offset: 1px; }
+  input[type="range"] { width: 100%; accent-color: var(--shu); }
+
+  .stat {
+    font-size: 13px; color: var(--ink-soft);
+    display: flex; justify-content: space-between; padding: 4px 0;
+  }
+  .stat b { color: var(--ink); font-weight: 700; }
+
+  .row { display: flex; gap: 8px; align-items: center; }
+  .row > * { flex: 1; }
+
+  /* Libreria */
+  #libraryList { display: flex; flex-direction: column; gap: 6px; max-height: 260px; overflow-y: auto; }
+  .lib-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 10px;
+    border: 1px solid var(--line); border-radius: 8px;
+    background: var(--paper);
+  }
+  .lib-item .glyph {
+    font-family: var(--font-serif);
+    font-size: 22px; font-weight: 700; color: var(--shu);
+    min-width: 32px; text-align: center;
+  }
+  .lib-item .meta { flex: 1; min-width: 0; }
+  .lib-item .meta .name { font-weight: 700; font-size: 14px; }
+  .lib-item .meta .info { font-size: 12px; color: var(--ink-soft); }
+  .lib-item button { padding: 6px 10px; font-size: 13px; }
+  .lib-empty { font-size: 13px; color: var(--ink-soft); padding: 6px 2px; }
+
+  .toggle-row {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 13px; color: var(--ink-soft); margin-top: 8px;
+  }
+  .toggle-row input { accent-color: var(--shu); width: 16px; height: 16px; }
+
+  #status {
+    flex: 0 0 auto;
+    font-size: 12px; color: var(--ink-soft);
+    text-align: center; min-height: 20px;
+    padding: 2px 10px 6px;
+  }
+  #status.rec { color: var(--shu); font-weight: 700; }
+
+  @media (prefers-reduced-motion: reduce) {
+    button { transition: none; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1><span class="kanji">筆</span>Fude</h1>
+  <span class="sub">registra e rivedi l'ordine dei tratti</span>
+  <button id="btnTheme" class="theme-btn" aria-label="Cambia tema chiaro/scuro">🌙</button>
+</header>
+
+<div class="topbar">
+  <div class="seg" id="segFormat" role="group" aria-label="Formato foglio">
+    <button data-format="quadrato" class="active">Quadrato</button>
+    <button data-format="a4">A4</button>
+    <button data-format="lavagna">Lavagna</button>
+  </div>
+  <div class="seg" id="segSize" role="group" aria-label="Dimensione foglio">
+    <button data-size="normale" class="active">Normale</button>
+    <button data-size="grande">Grande</button>
+  </div>
+  <span class="tb-sep" aria-hidden="true"></span>
+  <button id="btnPlay" class="primary">▶ Riproduci</button>
+  <button id="btnStop" disabled>■ Ferma</button>
+  <button id="btnUndo">↩ Annulla</button>
+  <button id="btnClear">Pulisci</button>
+  <div class="export-wrap">
+    <button id="btnExportDock">⬇ Esporta</button>
+    <div id="exportMenu" class="export-menu" hidden>
+      <button data-exp="video">🎬 Video animato</button>
+      <button data-exp="png">🖼 Immagine PNG</button>
+      <button data-exp="jpg">🖼 Immagine JPG</button>
+      <div id="menuSaveArea" class="menu-save-area" hidden></div>
+    </div>
+  </div>
+  <button id="btnPanel" class="dock-toggle" aria-label="Mostra o nascondi i controlli">☰</button>
+</div>
+
+<main class="board-area">
+  <div class="canvas-frame">
+    <canvas id="board"></canvas>
+  </div>
+</main>
+<div id="status"></div>
+
+<aside>
+  <div class="panel-head">
+    <h2>Controlli</h2>
+    <button id="btnPanelClose" aria-label="Chiudi pannello">✕</button>
+  </div>
+
+  <div class="card">
+    <h2>Riproduzione</h2>
+    <div class="stat"><span>Tratti registrati</span><b id="strokeCount">0</b></div>
+    <label class="field" for="speed">Velocità: <span id="speedLabel">1×</span></label>
+    <input type="range" id="speed" min="0.5" max="3" step="0.25" value="1">
+    <div class="toggle-row">
+      <input type="checkbox" id="showNumbers" checked>
+      <label for="showNumbers">Mostra i numeri d'ordine</label>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Esporta</h2>
+    <p style="font-size:13px;color:var(--ink-soft);margin-bottom:10px">
+      Anima i tratti in un video, oppure salva il carattere finito come immagine.
+    </p>
+    <button id="btnExport" class="primary" style="width:100%">🎬 Esporta video</button>
+    <div class="btn-row" style="margin-top:8px">
+      <button id="btnExportPng">🖼 PNG</button>
+      <button id="btnExportJpg">🖼 JPG</button>
+    </div>
+    <div id="exportInfo" style="font-size:12px;color:var(--ink-soft);margin-top:10px"></div>
+  </div>
+
+  <div class="card">
+    <h2>Salva kanji</h2>
+    <label class="field" for="kanjiName">Nome o carattere (es. 水)</label>
+    <div class="row">
+      <input type="text" id="kanjiName" maxlength="30" placeholder="水">
+      <button id="btnSave" class="primary" style="flex:0 0 auto">Salva</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Libreria</h2>
+    <div id="libraryList"></div>
+    <div class="btn-row" style="margin-top:10px">
+      <button id="btnExportLib">⬆ Esporta libreria</button>
+      <button id="btnImportLib">⬇ Importa</button>
+    </div>
+    <input type="file" id="importFile" accept=".json,application/json" hidden>
+  </div>
+
+  <div class="about">
+    <div><strong>筆 Fude</strong> — lavagna per registrare e rivedere l'ordine dei tratti dei kanji, nata per lo studio del giapponese.</div>
+    <div>I tuoi kanji restano solo su questo dispositivo: nessun account, nessun server. Usa "Esporta libreria" per portarli altrove.</div>
+    <div>Licenza MIT · <a href="https://github.com/TUOUSER/fude" target="_blank" rel="noopener">Codice sorgente</a></div>
+  </div>
+</aside>
+
+<script>
+(() => {
+  "use strict";
+
+  // ------------------------------------------------------------
+  // Stato
+  // ------------------------------------------------------------
+  const canvas = document.getElementById("board");
+  const ctx = canvas.getContext("2d");
+  let strokes = [];          // [{ points: [{x,y,t}], ... }] — coordinate normalizzate 0..1
+  let currentStroke = null;
+  let isPlaying = false;
+  let playbackHandle = null;
+  let dpr = 1, w = 0, h = 0; // dimensioni in px CSS
+
+  const FORMATS = {
+    quadrato: { ratio: 1,         maxw: 640, maxwBig: 1000 },
+    a4:       { ratio: 210 / 297, maxw: 480, maxwBig: 760 },
+    lavagna:  { ratio: 16 / 9,    maxw: 720, maxwBig: 1400 }
+  };
+  let currentFormat = "quadrato";
+  let bigSize = false;
+  const S = () => Math.min(w, h); // lato minore, riferimento per pennello e testi
+
+  const THEMES = {
+    light: { paper: "#F8F4E9", ink: "#211E1A", guide: "#C9BFA8", shu: "#BF3B2B" },
+    dark:  { paper: "#26231F", ink: "#EDE8DC", guide: "#4E463A", shu: "#D45543" }
+  };
+  let theme = "light";
+  const T = () => THEMES[theme];
+
+  function setTheme(t) {
+    theme = t;
+    document.body.classList.toggle("dark", t === "dark");
+    const btn = $("btnTheme");
+    if (btn) btn.textContent = t === "dark" ? "☀️" : "🌙";
+    redraw();
+  }
+  const BRUSH_BASE = 0.018;  // spessore base relativo al lato
+  const GAP_BETWEEN_STROKES = 350; // ms in riproduzione
+  const MIN_STROKE_MS = 260;
+
+  const $ = id => document.getElementById(id);
+  const statusEl = $("status");
+
+  function setStatus(msg, rec = false) {
+    statusEl.textContent = msg;
+    statusEl.className = rec ? "rec" : "";
+  }
+
+  // ------------------------------------------------------------
+  // Canvas: dimensioni e sfondo
+  // ------------------------------------------------------------
+  function resizeCanvas() {
+    const rect = canvas.parentElement.getBoundingClientRect();
+    w = rect.width; h = rect.height;
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    canvas.width = Math.round(w * dpr);
+    canvas.height = Math.round(h * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    redraw();
+  }
+
+  function applyFormat() {
+    const f = FORMATS[currentFormat];
+    const frame = canvas.parentElement;
+    const area = frame.parentElement; // .board-area
+    const pad = 4;
+    const aw = Math.max(area.clientWidth - pad * 2, 50);
+    const ah = Math.max(area.clientHeight - pad * 2, 50);
+    const maxw = bigSize ? f.maxwBig : f.maxw;
+    // adatta il foglio nello spazio disponibile mantenendo le proporzioni
+    let fw = Math.min(aw, maxw, ah * f.ratio);
+    let fh = fw / f.ratio;
+    if (fh > ah) { fh = ah; fw = fh * f.ratio; }
+    frame.style.width = Math.floor(fw) + "px";
+    frame.style.height = Math.floor(fh) + "px";
+    resizeCanvas();
+  }
+
+  function drawPaper() {
+    ctx.fillStyle = T().paper;
+    ctx.fillRect(0, 0, w, h);
+    if (currentFormat === "quadrato") {
+      // griglia stile foglio di esercizi: croce tratteggiata + diagonali leggere
+      ctx.save();
+      ctx.strokeStyle = T().guide;
+      ctx.lineWidth = 1;
+      ctx.setLineDash([7, 7]);
+      ctx.globalAlpha = 0.55;
+      ctx.beginPath();
+      ctx.moveTo(w / 2, 0); ctx.lineTo(w / 2, h);
+      ctx.moveTo(0, h / 2); ctx.lineTo(w, h / 2);
+      ctx.stroke();
+      ctx.globalAlpha = 0.22;
+      ctx.beginPath();
+      ctx.moveTo(0, 0); ctx.lineTo(w, h);
+      ctx.moveTo(w, 0); ctx.lineTo(0, h);
+      ctx.stroke();
+      ctx.restore();
+    }
+    // bordo interno
+    ctx.save();
+    ctx.strokeStyle = T().guide;
+    ctx.globalAlpha = 0.7;
+    ctx.lineWidth = 2;
+    ctx.strokeRect(1, 1, w - 2, h - 2);
+    ctx.restore();
+  }
+
+  // ------------------------------------------------------------
+  // Pennello: larghezza per-punto, tratto disegnato come UN'UNICA forma piena
+  // (niente segmenti separati -> niente "pallini" dei cap arrotondati)
+  // ------------------------------------------------------------
+  function widthAtPoint(pts, i) {
+    const base = BRUSH_BASE * S();
+    const a = pts[Math.max(0, i - 1)];
+    const b = pts[Math.min(pts.length - 1, i + 1)];
+    const dx = (b.x - a.x) * w, dy = (b.y - a.y) * h;
+    const dt = Math.max(b.t - a.t, 1);
+    const v = Math.hypot(dx, dy) / dt;               // px/ms
+    const vFactor = 1.2 - Math.min(v / 2.2, 1) * 0.45;
+    const pr = pts[i].p;
+    const pFactor = Math.abs(pr - 0.5) > 0.001 ? (0.6 + pr * 0.8) : 1;
+    return Math.max(base * vFactor * pFactor, base * 0.6);
+  }
+
+  function drawStrokeSegmented(stroke, upTo = Infinity) {
+    const pts = stroke.points;
+    if (pts.length === 0) return;
+    const n = Math.min(pts.length, upTo);
+    ctx.save();
+    ctx.fillStyle = T().ink;
+
+    // punto singolo o tratto puntiforme: un disco
+    if (n === 1) {
+      ctx.beginPath();
+      ctx.arc(pts[0].x * w, pts[0].y * h, widthAtPoint(pts, 0) / 2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+      return;
+    }
+
+    // coordinate in pixel e larghezze per punto
+    const P = new Array(n), HW = new Array(n);
+    for (let i = 0; i < n; i++) {
+      P[i] = { x: pts[i].x * w, y: pts[i].y * h };
+      HW[i] = widthAtPoint(pts, i) / 2;
+    }
+
+    // bordi sinistro/destro spostati lungo la normale della tangente
+    const left = [], right = [];
+    for (let i = 0; i < n; i++) {
+      const prev = P[Math.max(0, i - 1)];
+      const next = P[Math.min(n - 1, i + 1)];
+      let tx = next.x - prev.x, ty = next.y - prev.y;
+      const len = Math.hypot(tx, ty) || 1;
+      tx /= len; ty /= len;
+      const nx = -ty, ny = tx;                        // normale
+      left.push({ x: P[i].x + nx * HW[i], y: P[i].y + ny * HW[i] });
+      right.push({ x: P[i].x - nx * HW[i], y: P[i].y - ny * HW[i] });
+    }
+
+    // un unico poligono: bordo sinistro in avanti, destro all'indietro
+    ctx.beginPath();
+    ctx.moveTo(left[0].x, left[0].y);
+    for (let i = 1; i < n; i++) ctx.lineTo(left[i].x, left[i].y);
+    for (let i = n - 1; i >= 0; i--) ctx.lineTo(right[i].x, right[i].y);
+    ctx.closePath();
+    ctx.fill();
+
+    // cappucci tondi alle due estremità
+    ctx.beginPath();
+    ctx.arc(P[0].x, P[0].y, HW[0], 0, Math.PI * 2);
+    ctx.arc(P[n - 1].x, P[n - 1].y, HW[n - 1], 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.restore();
+  }
+
+  function drawStrokeNumber(stroke, index) {
+    const p = stroke.points[0];
+    if (!p) return;
+    const r = S() * 0.022;
+    const x = p.x * w, y = p.y * h;
+    ctx.save();
+    ctx.fillStyle = T().shu;
+    ctx.font = `700 ${Math.round(S() * 0.032)}px sans-serif`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    // piccolo offset per non coprire l'inizio del tratto
+    const ox = x < w * 0.12 ? r * 2.2 : -r * 2.2;
+    const oy = y < h * 0.12 ? r * 2.2 : -r * 2.2;
+    ctx.fillText(String(index + 1), x + ox, y + oy);
+    ctx.restore();
+  }
+
+  function redraw() {
+    drawPaper();
+    strokes.forEach((s, i) => {
+      drawStrokeSegmented(s);
+      if ($("showNumbers").checked) drawStrokeNumber(s, i);
+    });
+  }
+
+  // ------------------------------------------------------------
+  // Input: disegno con pointer events (mouse, tocco, penna)
+  // ------------------------------------------------------------
+  function toNorm(ev) {
+    const rect = canvas.getBoundingClientRect();
+    // pressione reale se disponibile (stylus); mouse/tocco spesso danno 0 o 0.5
+    let pr = (typeof ev.pressure === "number" && ev.pressure > 0) ? ev.pressure : 0.5;
+    return {
+      x: Math.min(Math.max((ev.clientX - rect.left) / rect.width, 0), 1),
+      y: Math.min(Math.max((ev.clientY - rect.top) / rect.height, 0), 1),
+      p: pr,
+      t: performance.now()
+    };
+  }
+
+  canvas.addEventListener("pointerdown", ev => {
+    if (isPlaying) return;
+    ev.preventDefault();
+    canvas.setPointerCapture(ev.pointerId);
+    currentStroke = { points: [toNorm(ev)] };
+    setStatus(`Tratto ${strokes.length + 1} in corso…`, true);
+  });
+
+  canvas.addEventListener("pointermove", ev => {
+    if (!currentStroke) return;
+    ev.preventDefault();
+    // usa gli eventi coalescenti per un tratto più fluido, se disponibili
+    const events = ev.getCoalescedEvents ? ev.getCoalescedEvents() : [ev];
+    for (const e of events) addPoint(currentStroke, toNorm(e));
+    redrawWithCurrent();
+  });
+
+  // Aggiunge un punto densificando: se troppo lontano dal precedente, interpola.
+  // Elimina i buchi ("puntini") sui tratti veloci senza toccare i tempi reali.
+  const MAX_STEP = 0.012; // distanza max tra campioni consecutivi (frazione del lato)
+  function addPoint(stroke, pt) {
+    const pts = stroke.points;
+    if (pts.length === 0) { pts.push(pt); return; }
+    const prev = pts[pts.length - 1];
+    const dist = Math.hypot(pt.x - prev.x, pt.y - prev.y);
+    if (dist > MAX_STEP) {
+      const steps = Math.min(Math.ceil(dist / MAX_STEP), 24);
+      for (let i = 1; i < steps; i++) {
+        const f = i / steps;
+        pts.push({
+          x: prev.x + (pt.x - prev.x) * f,
+          y: prev.y + (pt.y - prev.y) * f,
+          p: prev.p + (pt.p - prev.p) * f,
+          t: prev.t + (pt.t - prev.t) * f
+        });
+      }
+    }
+    pts.push(pt);
+  }
+
+  function redrawWithCurrent() {
+    redraw();
+    if (currentStroke) drawStrokeSegmented(currentStroke);
+  }
+
+  function endStroke(ev) {
+    if (!currentStroke) return;
+    ev.preventDefault();
+    if (currentStroke.points.length > 1) {
+      // normalizza i tempi: t relativo all'inizio del tratto
+      const t0 = currentStroke.points[0].t;
+      currentStroke.points = currentStroke.points.map(p => ({ x: p.x, y: p.y, t: p.t - t0 }));
+      strokes.push(currentStroke);
+      setStatus(`Tratto ${strokes.length} registrato.`);
+    } else {
+      setStatus("");
+    }
+    currentStroke = null;
+    updateUI();
+    redraw();
+  }
+  canvas.addEventListener("pointerup", endStroke);
+  canvas.addEventListener("pointercancel", endStroke);
+
+  // ------------------------------------------------------------
+  // Controlli base
+  // ------------------------------------------------------------
+  $("btnUndo").addEventListener("click", () => {
+    if (isPlaying || strokes.length === 0) return;
+    strokes.pop();
+    updateUI(); redraw();
+    setStatus("Ultimo tratto annullato.");
+  });
+
+  let clearArmed = null;
+  $("btnClear").addEventListener("click", () => {
+    if (isPlaying) return;
+    const btn = $("btnClear");
+    if (strokes.length === 0) { redraw(); return; }
+    if (clearArmed) {
+      clearTimeout(clearArmed);
+      clearArmed = null;
+      btn.textContent = "Pulisci foglio";
+      strokes = [];
+      updateUI(); redraw();
+      setStatus("Foglio pulito.");
+    } else {
+      btn.textContent = "Sicuro? Tocca di nuovo";
+      setStatus("Tocca di nuovo per confermare.");
+      clearArmed = setTimeout(() => {
+        clearArmed = null;
+        btn.textContent = "Pulisci foglio";
+        setStatus("");
+      }, 3000);
+    }
+  });
+
+  $("showNumbers").addEventListener("change", redraw);
+
+  $("speed").addEventListener("input", () => {
+    $("speedLabel").textContent = $("speed").value + "×";
+  });
+
+  function setFormatButtons() {
+    [...$("segFormat").querySelectorAll("button")].forEach(b =>
+      b.classList.toggle("active", b.dataset.format === currentFormat));
+  }
+
+  $("segFormat").addEventListener("click", ev => {
+    const btn = ev.target.closest("button[data-format]");
+    if (!btn || isPlaying) return;
+    currentFormat = btn.dataset.format;
+    setFormatButtons();
+    applyFormat();
+    if (strokes.length) setStatus("Formato cambiato: i tratti esistenti si adattano al nuovo foglio.");
+  });
+
+  $("segSize").addEventListener("click", ev => {
+    const btn = ev.target.closest("button[data-size]");
+    if (!btn || isPlaying) return;
+    bigSize = btn.dataset.size === "grande";
+    [...$("segSize").querySelectorAll("button")].forEach(b =>
+      b.classList.toggle("active", b === btn));
+    applyFormat();
+  });
+
+  $("btnTheme").addEventListener("click", () => {
+    setTheme(theme === "light" ? "dark" : "light");
+    storeSet("fude:theme", theme);
+  });
+
+  // Pannello drawer: si apre/chiude con ☰ e col tasto ✕
+  $("btnPanel").addEventListener("click", () => {
+    const collapsed = document.body.classList.toggle("panel-collapsed");
+    storeSet("fude:panel", collapsed ? "closed" : "open");
+  });
+  $("btnPanelClose").addEventListener("click", () => {
+    document.body.classList.add("panel-collapsed");
+    storeSet("fude:panel", "closed");
+  });
+
+  // ------------------------------------------------------------
+  // Import / Export libreria (JSON)
+  // ------------------------------------------------------------
+  $("btnExportLib").addEventListener("click", async () => {
+    const keys = await storeList("kanji:");
+    const out = [];
+    for (const k of keys) {
+      try {
+        const d = JSON.parse(await storeGet(k));
+        if (d && Array.isArray(d.strokes) && d.strokes.length) out.push(d);
+      } catch (e) {}
+    }
+    if (!out.length) { setStatus("La libreria è vuota, niente da esportare."); return; }
+    const blob = new Blob(
+      [JSON.stringify({ app: "fude", version: 1, kanji: out }, null, 2)],
+      { type: "application/json" }
+    );
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "fude-libreria.json";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 30000);
+    setStatus(`Libreria esportata (${out.length} kanji).`);
+  });
+
+  $("btnImportLib").addEventListener("click", () => $("importFile").click());
+
+  $("importFile").addEventListener("change", async ev => {
+    const file = ev.target.files[0];
+    ev.target.value = "";
+    if (!file) return;
+    try {
+      const data = JSON.parse(await file.text());
+      // accetta: export completo {kanji:[...]}, array puro, o singolo kanji {strokes:[...]}
+      const list = Array.isArray(data) ? data
+        : Array.isArray(data.kanji) ? data.kanji
+        : (data && Array.isArray(data.strokes)) ? [data]
+        : null;
+      if (!list) throw new Error("formato non riconosciuto");
+      let n = 0;
+      for (const k of list) {
+        if (!k || !Array.isArray(k.strokes) || !k.strokes.length) continue;
+        const payload = JSON.stringify({
+          name: String(k.name || "kanji").slice(0, 30),
+          strokes: k.strokes,
+          format: FORMATS[k.format] ? k.format : "quadrato",
+          savedAt: k.savedAt || new Date().toISOString()
+        });
+        await storeSet("kanji:" + (Date.now() + n), payload);
+        n++;
+      }
+      await renderLibrary();
+      setStatus(n ? `Importati ${n} kanji nella libreria.` : "Nessun kanji valido nel file.");
+    } catch (e) {
+      setStatus("File non valido: serve un JSON esportato da Fude.");
+    }
+  });
+
+  function updateUI() {
+    $("strokeCount").textContent = strokes.length;
+    const has = strokes.length > 0;
+    $("btnPlay").disabled = !has || isPlaying;
+    $("btnExport").disabled = !has || isPlaying;
+    $("btnExportDock").disabled = !has || isPlaying;
+    $("btnExportPng").disabled = !has || isPlaying;
+    $("btnExportJpg").disabled = !has || isPlaying;
+    $("btnSave").disabled = !has || isPlaying;
+    $("btnUndo").disabled = !has || isPlaying;
+    $("btnClear").disabled = isPlaying;
+  }
+
+  // ------------------------------------------------------------
+  // Riproduzione animata
+  // ------------------------------------------------------------
+  function buildTimeline() {
+    // [{stroke, start, duration}] in ms (a velocità 1×)
+    let t = 400; // breve pausa iniziale
+    return strokes.map(s => {
+      const pts = s.points;
+      const dur = Math.max(pts[pts.length - 1].t, MIN_STROKE_MS);
+      const item = { stroke: s, start: t, duration: dur };
+      t += dur + GAP_BETWEEN_STROKES;
+      return item;
+    });
+  }
+
+  function timelineTotal(timeline) {
+    if (!timeline.length) return 0;
+    const last = timeline[timeline.length - 1];
+    return last.start + last.duration + 600; // coda finale
+  }
+
+  // onFrame(tMs) disegna lo stato al tempo t; ritorna quando finito
+  function runPlayback(speedFactor, onDone) {
+    const timeline = buildTimeline();
+    const total = timelineTotal(timeline);
+    const startReal = performance.now();
+    isPlaying = true;
+    updateUI();
+    $("btnStop").disabled = false;
+
+    function frame(now) {
+      const t = (now - startReal) * speedFactor;
+      drawPaper();
+      timeline.forEach((item, idx) => {
+        const local = t - item.start;
+        if (local <= 0) return;
+        const pts = item.stroke.points;
+        if (local >= item.duration) {
+          drawStrokeSegmented(item.stroke);
+          if ($("showNumbers").checked) drawStrokeNumber(item.stroke, idx);
+        } else {
+          // quanti punti disegnare al tempo "local"
+          let n = 1;
+          while (n < pts.length && pts[n].t <= local) n++;
+          drawStrokeSegmented(item.stroke, n);
+        }
+      });
+      if (t < total && isPlaying) {
+        playbackHandle = requestAnimationFrame(frame);
+      } else {
+        stopPlayback();
+        if (onDone) onDone();
+      }
+    }
+    playbackHandle = requestAnimationFrame(frame);
+  }
+
+  function stopPlayback() {
+    isPlaying = false;
+    if (playbackHandle) cancelAnimationFrame(playbackHandle);
+    playbackHandle = null;
+    $("btnStop").disabled = true;
+    updateUI();
+    redraw();
+  }
+
+  $("btnPlay").addEventListener("click", () => {
+    if (!strokes.length || isPlaying) return;
+    setStatus("Riproduzione in corso…");
+    runPlayback(parseFloat($("speed").value), () => setStatus("Riproduzione terminata."));
+  });
+
+  $("btnStop").addEventListener("click", () => {
+    stopPlayback();
+    setStatus("Riproduzione fermata.");
+  });
+
+  // ------------------------------------------------------------
+  // Export video (MP4 se supportato, altrimenti WebM)
+  // ------------------------------------------------------------
+  function pickMime() {
+    const candidates = [
+      { mime: 'video/mp4;codecs="avc1.42E01E"', ext: "mp4", label: "MP4" },
+      { mime: "video/mp4", ext: "mp4", label: "MP4" },
+      { mime: "video/webm;codecs=vp9", ext: "webm", label: "WebM" },
+      { mime: "video/webm", ext: "webm", label: "WebM" }
+    ];
+    for (const c of candidates) {
+      if (window.MediaRecorder && MediaRecorder.isTypeSupported(c.mime)) return c;
+    }
+    return null;
+  }
+
+  let lastExport = null; // { blob, url, filename, kind }
+  let lastDownloadable = null; // { blob, filename } — ultimo file esportato (video o immagine)
+
+  function downloadBlob(blob, filename) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 30000);
+    setStatus(`File "${filename}" scaricato.`);
+  }
+
+  function makeSaveButtons(blob, filename, container) {
+    container.innerHTML = "";
+    const label = document.createElement("div");
+    label.className = "save-label";
+    label.textContent = "Ultimo: " + filename;
+    container.appendChild(label);
+
+    const dl = document.createElement("button");
+    dl.className = "primary";
+    dl.textContent = "\uD83D\uDCBE Scarica";
+    dl.addEventListener("click", () => downloadBlob(blob, filename));
+    container.appendChild(dl);
+
+    const file = new File([blob], filename, { type: blob.type });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      const sh = document.createElement("button");
+      sh.textContent = "\uD83D\uDCF1 Salva in galleria";
+      sh.addEventListener("click", async () => {
+        try { await navigator.share({ files: [file], title: filename }); }
+        catch (e) { /* annullato */ }
+      });
+      container.appendChild(sh);
+    }
+  }
+
+  function setLastDownloadable(blob, filename) {
+    lastDownloadable = { blob, filename };
+    const area = $("menuSaveArea");
+    if (area) {
+      makeSaveButtons(blob, filename, area);
+      area.hidden = false;
+    }
+  }
+
+  // Costruisce un menu con: download (sempre) + salva in galleria (se supportato)
+  function buildSaveRow(blob, filename) {
+    setLastDownloadable(blob, filename);
+    const row = document.createElement("div");
+    row.className = "btn-row";
+
+    const dl = document.createElement("button");
+    dl.className = "primary";
+    dl.textContent = "\uD83D\uDCBE Scarica";
+    dl.addEventListener("click", () => downloadBlob(blob, filename));
+    row.appendChild(dl);
+
+    // Salva in galleria: Apple (Foto) e Android via share sheet nativa
+    const file = new File([blob], filename, { type: blob.type });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      const sh = document.createElement("button");
+      sh.textContent = "\uD83D\uDCF1 Salva in galleria";
+      sh.addEventListener("click", async () => {
+        try { await navigator.share({ files: [file], title: filename }); }
+        catch (e) { /* annullato dall'utente */ }
+      });
+      row.appendChild(sh);
+    }
+    return row;
+  }
+
+  function renderExportButtons() {
+    const info = $("exportInfo");
+    info.innerHTML = "";
+    if (!lastExport) return;
+
+    const note = document.createElement("div");
+    note.style.cssText = "font-size:12px;color:var(--ink-soft);margin-bottom:8px";
+    const isMp4 = lastExport.filename.endsWith(".mp4");
+    const shareOk = navigator.canShare && navigator.canShare({ files: [new File([lastExport.blob], lastExport.filename, { type: lastExport.blob.type })] });
+    note.textContent = shareOk
+      ? (isMp4 ? "Video MP4 pronto. Su iPhone/iPad tocca \u201CSalva in galleria\u201D \u2192 Salva video." : "Video pronto. \u201CSalva in galleria\u201D lo mette in Foto/Galleria.")
+      : "Video pronto. Tocca \u201CScarica\u201D per salvarlo (su questo dispositivo la condivisione diretta non \u00e8 disponibile).";
+    info.appendChild(note);
+    info.appendChild(buildSaveRow(lastExport.blob, lastExport.filename));
+  }
+
+  // ------------------------------------------------------------
+  // Export immagine statica (PNG / JPG) — istantaneo, senza registrazione
+  // ------------------------------------------------------------
+  function exportImage(type) {
+    if (!strokes.length || isPlaying) { setStatus("Disegna qualcosa prima di esportare."); return; }
+    // ridisegna lo stato completo, poi cattura
+    redraw();
+    const ext = type === "image/jpeg" ? "jpg" : "png";
+    const name = ($("kanjiName").value.trim() || "kanji") + "-tratti." + ext;
+    // JPG non ha trasparenza: il fondo carta è già disegnato da drawPaper, ok
+    canvas.toBlob((blob) => {
+      if (!blob) { setStatus("Export immagine non riuscito."); return; }
+      const info = $("exportInfo");
+      info.innerHTML = "";
+      const note = document.createElement("div");
+      note.style.cssText = "font-size:12px;color:var(--ink-soft);margin-bottom:8px";
+      note.textContent = `Immagine ${ext.toUpperCase()} pronta.`;
+      info.appendChild(note);
+      info.appendChild(buildSaveRow(blob, name));
+      document.body.classList.remove("panel-collapsed");
+      setStatus(`Immagine ${ext.toUpperCase()} pronta: scarica o salva in galleria.`);
+    }, type, type === "image/jpeg" ? 0.92 : undefined);
+  }
+
+  function runExport() {
+    if (!strokes.length || isPlaying) return;
+    const fmt = pickMime();
+    if (!fmt) {
+      $("exportInfo").textContent = "Questo browser non supporta la registrazione video del canvas.";
+      setStatus("Export non supportato da questo browser.");
+      return;
+    }
+    $("exportInfo").textContent = `Registrazione in formato ${fmt.label}\u2026`;
+    setStatus("Esportazione video in corso\u2026", true);
+
+    const stream = canvas.captureStream(60);
+    const recorder = new MediaRecorder(stream, { mimeType: fmt.mime, videoBitsPerSecond: 6_000_000 });
+    const chunks = [];
+    recorder.ondataavailable = e => { if (e.data.size) chunks.push(e.data); };
+    recorder.onstop = () => {
+      if (lastExport) URL.revokeObjectURL(lastExport.url); // libera solo l'export precedente
+      const blob = new Blob(chunks, { type: fmt.mime });
+      const name = ($("kanjiName").value.trim() || "kanji");
+      lastExport = { blob, url: URL.createObjectURL(blob), filename: `${name}-tratti.${fmt.ext}` };
+      // apri il pannello così l'utente vede i tasti Scarica / Salva in galleria
+      document.body.classList.remove("panel-collapsed");
+      renderExportButtons();
+      setStatus("Esportazione completata: scarica il file o salvalo in galleria.");
+    };
+
+    recorder.start();
+    runPlayback(parseFloat($("speed").value), () => {
+      // piccola coda per non tagliare l'ultimo frame
+      setTimeout(() => recorder.stop(), 300);
+    });
+  }
+
+  $("btnExport").addEventListener("click", runExport);
+  $("btnExportPng").addEventListener("click", () => exportImage("image/png"));
+  $("btnExportJpg").addEventListener("click", () => exportImage("image/jpeg"));
+
+  // Menu export della dock
+  const exportMenu = $("exportMenu");
+  $("btnExportDock").addEventListener("click", (e) => {
+    e.stopPropagation();
+    exportMenu.hidden = !exportMenu.hidden;
+  });
+  exportMenu.addEventListener("click", (e) => {
+    const btn = e.target.closest("button[data-exp]");
+    if (!btn) return;
+    exportMenu.hidden = true;
+    const kind = btn.dataset.exp;
+    if (kind === "video") runExport();
+    else if (kind === "png") exportImage("image/png");
+    else if (kind === "jpg") exportImage("image/jpeg");
+  });
+  // chiudi il menu toccando altrove
+  document.addEventListener("click", (e) => {
+    if (!exportMenu.hidden && !e.target.closest(".export-wrap")) exportMenu.hidden = true;
+  });
+
+  // ------------------------------------------------------------
+  // Libreria persistente (window.storage con fallback in memoria)
+  // ------------------------------------------------------------
+  // ------------------------------------------------------------
+  // Storage a rilevamento automatico: artifact -> localStorage -> memoria
+  // ------------------------------------------------------------
+  const memStore = new Map();
+  let backend = null; // "artifact" | "local" | "memory"
+  let warned = false;
+
+  function localAvailable() {
+    try { localStorage.setItem("__fude_t", "1"); localStorage.removeItem("__fude_t"); return true; }
+    catch (e) { return false; }
+  }
+
+  async function detectBackend() {
+    if (typeof window.storage !== "undefined") {
+      try {
+        // test funzionale, non basta che l'API esista
+        await window.storage.set("fude-ping", "1");
+        await window.storage.delete("fude-ping");
+        return "artifact";
+      } catch (e) { /* storage artifact presente ma non funzionante in questa sessione */ }
+    }
+    if (localAvailable()) return "local";
+    return "memory";
+  }
+
+  async function ensureBackend() {
+    if (!backend) {
+      backend = await detectBackend();
+      if (backend === "memory" && !warned) {
+        warned = true;
+        console.warn("Fude: nessuno storage persistente disponibile, i salvataggi durano solo per questa sessione.");
+      }
+    }
+    return backend;
+  }
+
+  function downgrade() {
+    backend = localAvailable() ? "local" : "memory";
+  }
+
+  async function storeSet(key, value) {
+    await ensureBackend();
+    if (backend === "artifact") {
+      try { await window.storage.set(key, value); return true; } catch (e) { downgrade(); }
+    }
+    if (backend === "local") { localStorage.setItem(key, value); return true; }
+    memStore.set(key, value);
+    return true;
+  }
+  async function storeGet(key) {
+    await ensureBackend();
+    if (backend === "artifact") {
+      try { const r = await window.storage.get(key); return r ? r.value : null; }
+      catch (e) { return null; } // chiave assente: negli artifact lancia un errore
+    }
+    if (backend === "local") return localStorage.getItem(key);
+    return memStore.get(key) ?? null;
+  }
+  async function storeDelete(key) {
+    await ensureBackend();
+    if (backend === "artifact") {
+      try { await window.storage.delete(key); } catch (e) {}
+      return;
+    }
+    if (backend === "local") { localStorage.removeItem(key); return; }
+    memStore.delete(key);
+  }
+  async function storeList(prefix) {
+    await ensureBackend();
+    if (backend === "artifact") {
+      try { const r = await window.storage.list(prefix); return r ? r.keys : []; } catch (e) { return []; }
+    }
+    if (backend === "local") return Object.keys(localStorage).filter(k => k.startsWith(prefix));
+    return [...memStore.keys()].filter(k => k.startsWith(prefix));
+  }
+
+  $("btnSave").addEventListener("click", async () => {
+    const name = $("kanjiName").value.trim();
+    if (!name) { setStatus("Dai un nome al kanji prima di salvarlo."); $("kanjiName").focus(); return; }
+    if (!strokes.length) return;
+    const id = "kanji:" + Date.now();
+    const payload = JSON.stringify({
+      name,
+      strokes,
+      format: currentFormat,
+      savedAt: new Date().toISOString()
+    });
+    await storeSet(id, payload);
+    setStatus(`「${name}」 salvato nella libreria.`);
+    await renderLibrary();
+  });
+
+  async function renderLibrary() {
+    const listEl = $("libraryList");
+    const keys = (await storeList("kanji:")).sort().reverse();
+    listEl.innerHTML = "";
+    if (!keys.length) {
+      listEl.innerHTML = '<div class="lib-empty">Nessun kanji salvato. Disegna e salva il primo.</div>';
+      return;
+    }
+    for (const key of keys) {
+      let data;
+      try { data = JSON.parse(await storeGet(key)); } catch (e) { continue; }
+      if (!data) continue;
+      const item = document.createElement("div");
+      item.className = "lib-item";
+      const glyph = data.name.length <= 2 ? data.name : "字";
+      const date = new Date(data.savedAt).toLocaleDateString("it-IT");
+      item.innerHTML = `
+        <span class="glyph"></span>
+        <div class="meta">
+          <div class="name"></div>
+          <div class="info">${data.strokes.length} tratti · ${date}</div>
+        </div>
+        <button data-act="load">Apri</button>
+        <button data-act="del" title="Elimina">✕</button>`;
+      item.querySelector(".glyph").textContent = glyph;
+      item.querySelector(".name").textContent = data.name;
+      item.querySelector('[data-act="load"]').addEventListener("click", () => {
+        if (isPlaying) return;
+        strokes = data.strokes;
+        $("kanjiName").value = data.name;
+        if (data.format && FORMATS[data.format]) {
+          currentFormat = data.format;
+          setFormatButtons();
+          applyFormat();
+        }
+        updateUI(); redraw();
+        setStatus(`「${data.name}」 caricato: premi Riproduci per rivederlo.`);
+      });
+      const delBtn = item.querySelector('[data-act="del"]');
+      delBtn.addEventListener("click", async () => {
+        if (delBtn.dataset.armed) {
+          await storeDelete(key);
+          await renderLibrary();
+          setStatus(`「${data.name}」 eliminato.`);
+        } else {
+          delBtn.dataset.armed = "1";
+          delBtn.textContent = "Confermi?";
+          setTimeout(() => {
+            delBtn.dataset.armed = "";
+            delBtn.textContent = "✕";
+          }, 3000);
+        }
+      });
+      listEl.appendChild(item);
+    }
+  }
+
+  // ------------------------------------------------------------
+  // Avvio
+  // ------------------------------------------------------------
+  window.addEventListener("resize", applyFormat);
+  applyFormat();
+  updateUI();
+  renderLibrary();
+  setStatus("Disegna il primo tratto sul foglio.");
+  (async () => {
+    let t = null;
+    try { t = await storeGet("fude:theme"); } catch (e) {}
+    if (t !== "light" && t !== "dark") {
+      t = (window.matchMedia && matchMedia("(prefers-color-scheme: dark)").matches) ? "dark" : "light";
+    }
+    setTheme(t);
+
+    let panel = null;
+    try { panel = await storeGet("fude:panel"); } catch (e) {}
+    // drawer: chiuso di default, aperto solo se l'utente l'aveva lasciato aperto
+    if (panel !== "open") document.body.classList.add("panel-collapsed");
+  })();
+})();
+</script>
+</body>
+</html>
