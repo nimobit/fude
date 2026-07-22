@@ -514,46 +514,69 @@
     // intorno per la stima di velocità: più i punti sono fitti, più largo
     const k = Math.max(1, Math.round(n / 50));
 
-    // coordinate in pixel e larghezze per punto
-    const P = new Array(n), HW = new Array(n);
-    for (let i = 0; i < n; i++) {
-      P[i] = { x: pts[i].x * w, y: pts[i].y * h };
-      HW[i] = widthAtPoint(pts, i, k) / 2;
+    // DECIMAZIONE: la Pencil a 240Hz sui tratti lenti genera punti sub-pixel,
+    // che rendono instabili le normali. Il nastro si costruisce solo su punti
+    // ad almeno MIN_PX di distanza; i dati registrati restano intatti.
+    const MIN_PX = Math.max(2, S() * 0.006);
+    const idx = [0];
+    let lastKept = 0;
+    for (let i = 1; i < n - 1; i++) {
+      const ddx = (pts[i].x - pts[lastKept].x) * w;
+      const ddy = (pts[i].y - pts[lastKept].y) * h;
+      if (Math.hypot(ddx, ddy) >= MIN_PX) { idx.push(i); lastKept = i; }
+    }
+    idx.push(n - 1);
+    const m = idx.length;
+
+    if (m < 2) {
+      ctx.beginPath();
+      ctx.arc(pts[0].x * w, pts[0].y * h, widthAtPoint(pts, 0, 1) / 2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+      return;
+    }
+
+    // coordinate in pixel e larghezze per punto (sulla polilinea decimata)
+    const P = new Array(m), HW = new Array(m);
+    for (let j = 0; j < m; j++) {
+      const i = idx[j];
+      P[j] = { x: pts[i].x * w, y: pts[i].y * h };
+      HW[j] = widthAtPoint(pts, i, k) / 2;
     }
 
     // smoothing della larghezza: elimina il bordo "smerlato" della Pencil
-    const passes = n > 60 ? 4 : 2;
+    const passes = m > 60 ? 4 : 2;
     for (let p = 0; p < passes; p++) {
-      for (let i = 1; i < n - 1; i++) {
-        HW[i] = (HW[i - 1] + 2 * HW[i] + HW[i + 1]) / 4;
+      for (let j = 1; j < m - 1; j++) {
+        HW[j] = (HW[j - 1] + 2 * HW[j] + HW[j + 1]) / 4;
       }
     }
 
     // bordi sinistro/destro spostati lungo la normale della tangente
     const left = [], right = [];
-    for (let i = 0; i < n; i++) {
-      const prev = P[Math.max(0, i - 1)];
-      const next = P[Math.min(n - 1, i + 1)];
+    for (let j = 0; j < m; j++) {
+      const prev = P[Math.max(0, j - 1)];
+      const next = P[Math.min(m - 1, j + 1)];
       let tx = next.x - prev.x, ty = next.y - prev.y;
       const len = Math.hypot(tx, ty) || 1;
       tx /= len; ty /= len;
       const nx = -ty, ny = tx;                        // normale
-      left.push({ x: P[i].x + nx * HW[i], y: P[i].y + ny * HW[i] });
-      right.push({ x: P[i].x - nx * HW[i], y: P[i].y - ny * HW[i] });
+      left.push({ x: P[j].x + nx * HW[j], y: P[j].y + ny * HW[j] });
+      right.push({ x: P[j].x - nx * HW[j], y: P[j].y - ny * HW[j] });
     }
 
     // un unico poligono: bordo sinistro in avanti, destro all'indietro
     ctx.beginPath();
     ctx.moveTo(left[0].x, left[0].y);
-    for (let i = 1; i < n; i++) ctx.lineTo(left[i].x, left[i].y);
-    for (let i = n - 1; i >= 0; i--) ctx.lineTo(right[i].x, right[i].y);
+    for (let j = 1; j < m; j++) ctx.lineTo(left[j].x, left[j].y);
+    for (let j = m - 1; j >= 0; j--) ctx.lineTo(right[j].x, right[j].y);
     ctx.closePath();
     ctx.fill();
 
     // cappucci tondi alle due estremità
     ctx.beginPath();
     ctx.arc(P[0].x, P[0].y, HW[0], 0, Math.PI * 2);
-    ctx.arc(P[n - 1].x, P[n - 1].y, HW[n - 1], 0, Math.PI * 2);
+    ctx.arc(P[m - 1].x, P[m - 1].y, HW[m - 1], 0, Math.PI * 2);
     ctx.fill();
 
     ctx.restore();
