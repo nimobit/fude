@@ -481,10 +481,11 @@
   // Pennello: larghezza per-punto, tratto disegnato come UN'UNICA forma piena
   // (niente segmenti separati -> niente "pallini" dei cap arrotondati)
   // ------------------------------------------------------------
-  function widthAtPoint(pts, i) {
+  function widthAtPoint(pts, i, k) {
     const base = BRUSH_BASE * S();
-    const a = pts[Math.max(0, i - 1)];
-    const b = pts[Math.min(pts.length - 1, i + 1)];
+    const n = pts.length;
+    const a = pts[Math.max(0, i - k)];
+    const b = pts[Math.min(n - 1, i + k)];
     const dx = (b.x - a.x) * w, dy = (b.y - a.y) * h;
     const dt = Math.max(b.t - a.t, 1);
     const v = Math.hypot(dx, dy) / dt;               // px/ms
@@ -504,17 +505,28 @@
     // punto singolo o tratto puntiforme: un disco
     if (n === 1) {
       ctx.beginPath();
-      ctx.arc(pts[0].x * w, pts[0].y * h, widthAtPoint(pts, 0) / 2, 0, Math.PI * 2);
+      ctx.arc(pts[0].x * w, pts[0].y * h, widthAtPoint(pts, 0, 1) / 2, 0, Math.PI * 2);
       ctx.fill();
       ctx.restore();
       return;
     }
 
+    // intorno per la stima di velocità: più i punti sono fitti, più largo
+    const k = Math.max(1, Math.round(n / 50));
+
     // coordinate in pixel e larghezze per punto
     const P = new Array(n), HW = new Array(n);
     for (let i = 0; i < n; i++) {
       P[i] = { x: pts[i].x * w, y: pts[i].y * h };
-      HW[i] = widthAtPoint(pts, i) / 2;
+      HW[i] = widthAtPoint(pts, i, k) / 2;
+    }
+
+    // smoothing della larghezza: elimina il bordo "smerlato" della Pencil
+    const passes = n > 60 ? 4 : 2;
+    for (let p = 0; p < passes; p++) {
+      for (let i = 1; i < n - 1; i++) {
+        HW[i] = (HW[i - 1] + 2 * HW[i] + HW[i + 1]) / 4;
+      }
     }
 
     // bordi sinistro/destro spostati lungo la normale della tangente
@@ -611,6 +623,8 @@
     const pts = stroke.points;
     if (pts.length === 0) { pts.push(pt); return; }
     const prev = pts[pts.length - 1];
+    // smussa la pressione (la Pencil oscilla punto per punto a 240Hz)
+    pt.p = prev.p + (pt.p - prev.p) * 0.22;
     const dist = Math.hypot(pt.x - prev.x, pt.y - prev.y);
     if (dist > MAX_STEP) {
       const steps = Math.min(Math.ceil(dist / MAX_STEP), 24);
